@@ -1,0 +1,209 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Restaurant {
+  id                String   @id @default(uuid())
+  slug              String   @unique
+  name              String
+  logoBase64        String?  @db.Text
+  themeColor        String
+  adminThemeColor   String?
+  welcomeMessage    String?
+  description       String?  @db.Text
+  address           String?
+  neighborhood      String?
+  city              String?
+  heroImageBase64   String?  @db.Text
+  fontFamily        String?
+  borderRadius      String?
+  isDarkMode        Boolean?
+  categoryNavStyle  String?  @default("tabs")
+  heroStyle         String?  @default("cover")
+  instagramUrl      String?
+  facebookUrl       String?
+  tiktokUrl         String?
+  whatsappPhone     String?
+  couponsEnabled    Boolean? @default(false)
+  deliveryConfig    Json?
+  estimatedDeliveryTime String?
+  minimumOrderAmount    Float?
+  schedule              Json?
+  titleEffect           String?  @default("animate-none")
+
+  users             User[]
+  boxes             Box[]
+  categories        Category[]
+  products          Product[]
+  orders            Order[]
+  financialRecords  FinancialRecord[]
+  invoices          Invoice[]
+  modifierCategories ModifierCategory[]
+  coupons           Coupon[]
+  boxSessions       BoxSession[]
+}
+
+model User {
+  id           String      @id @default(uuid())
+  restaurantId String?
+  restaurant   Restaurant? @relation(fields: [restaurantId], references: [id])
+  name         String?
+  lastName     String?
+  email        String     @unique
+  phone        String?
+  vehiclePlate String?
+  passwordHash String
+  role         String     // 'SUPERADMIN' | 'ADMIN' | 'CASHIER' | 'DELIVERY'
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  boxes        Box[]        @relation("AssignedBoxes")
+  boxSessions  BoxSession[]
+}
+
+model Box {
+  id             String     @id @default(uuid())
+  restaurantId   String
+  restaurant     Restaurant @relation(fields: [restaurantId], references: [id])
+  name           String
+  description    String?
+  assignedUserId String?
+  assignedUser   User?      @relation("AssignedBoxes", fields: [assignedUserId], references: [id])
+  status         String     // 'OPEN' | 'CLOSED'
+  openedAt       DateTime?
+  closedAt       DateTime?
+  currentBalance Float      @default(0)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  sessions       BoxSession[]
+}
+
+model BoxSession {
+  id             String     @id @default(uuid())
+  boxId          String
+  box            Box        @relation(fields: [boxId], references: [id])
+  restaurantId   String
+  restaurant     Restaurant @relation(fields: [restaurantId], references: [id])
+  userId         String?
+  user           User?      @relation(fields: [userId], references: [id])
+  openedAt       DateTime
+  closedAt       DateTime
+  initialBalance Float
+  systemBalance  Float
+  manualCount    Float
+  difference     Float
+  comments       String?    @db.Text
+  createdAt      DateTime   @default(now())
+}
+
+model Category {
+  id           String     @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  name         String
+  orderIndex   Int
+}
+
+model Product {
+  id           String     @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  name         String
+  description  String?    @db.Text
+  price        Float
+  category     String
+  imageUrl     String     @db.Text
+  isAvailable  Boolean    @default(true)
+  trackStock   Boolean    @default(false)
+  currentStock Int?
+
+  isFeatured   Boolean?   @default(false)
+  variants     Json?
+  modifierIds  String[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model Order {
+  id              String     @id @default(uuid())
+  restaurantId    String
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id])
+  clientName      String
+  clientPhone     String
+  items           Json
+  totalAmount     Float
+  status          String
+  paymentMethod   String
+  deliveryAddress String?
+  deliveryType    String?
+  neighborhood    String?
+  city            String?
+  orderComments   String?    @db.Text
+  orderType       String?
+  origin          String?
+  orderNumber     Int?
+  driverId        String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+model FinancialRecord {
+  id            String     @id @default(uuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
+  type          String     // 'INCOME' | 'EXPENSE'
+  amount        Float
+  category      String
+  date          DateTime   @default(now())
+  boxName       String?
+  boxId         String?
+  paymentMethod String?
+  description   String?
+  createdAt     DateTime   @default(now())
+}
+
+model Invoice {
+  id            String     @id @default(uuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
+  orderId       String
+  clientName    String
+  clientNit     String
+  clientEmail   String
+  clientPhone   String?
+  totalAmount   Float
+  status        String
+  dianUrl       String?
+  cufe          String?
+  issuedAt      DateTime   @default(now())
+}
+
+model ModifierCategory {
+  id           String     @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  name         String
+  selection    String     // 'SINGLE' | 'MULTIPLE'
+  isRequired   Boolean
+  options      Json
+}
+
+model Coupon {
+  id                 String     @id @default(uuid())
+  restaurantId       String
+  restaurant         Restaurant @relation(fields: [restaurantId], references: [id])
+  code               String
+  discountPercentage Float
+  isActive           Boolean    @default(true)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  @@unique([restaurantId, code])
+}
+
