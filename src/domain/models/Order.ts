@@ -32,6 +32,10 @@ export interface Order {
   orderType?: 'DELIVERY' | 'POS';
   origin?: 'WEB' | 'POS';
   driverId?: string;
+  tableId?: string;
+  tableName?: string;
+  waitressId?: string;
+  waitressName?: string;
   createdAt: Date;
   updatedAt: Date;
 }

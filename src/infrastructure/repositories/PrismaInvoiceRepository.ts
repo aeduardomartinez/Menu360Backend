@@ -16,15 +16,28 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
     return invoice ? this.mapToInvoiceDIAN(invoice) : null;
   }
 
+  async findByOrderId(orderId: string): Promise<InvoiceDIAN | null> {
+    const invoice = await prisma.invoice.findFirst({ where: { orderId } });
+    return invoice ? this.mapToInvoiceDIAN(invoice) : null;
+  }
+
+  async updateStatus(id: string, status: string): Promise<InvoiceDIAN> {
+    const updated = await prisma.invoice.update({
+      where: { id },
+      data: { status }
+    });
+    return this.mapToInvoiceDIAN(updated);
+  }
+
   async create(invoiceData: Omit<InvoiceDIAN, 'id'>): Promise<InvoiceDIAN> {
     const newInvoice = await prisma.invoice.create({
       data: {
         restaurantId: 'rest-1', // Default for now
         orderId: invoiceData.orderId,
-        clientName: invoiceData.client.businessName,
-        clientNit: invoiceData.client.documentNumber,
-        clientEmail: invoiceData.client.email || '',
-        clientPhone: invoiceData.client.phone,
+        clientName: invoiceData.client.razonSocial,
+        clientNit: invoiceData.client.identificacion,
+        clientEmail: invoiceData.client.emailContacto || '',
+        clientPhone: invoiceData.client.telefonoContacto,
         totalAmount: invoiceData.totalAmount,
         status: invoiceData.status,
         issuedAt: new Date(invoiceData.issueDate)
@@ -39,14 +52,18 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
       invoiceNumber: data.id.substring(0, 8),
       orderId: data.orderId,
       client: {
-        id: data.id,
-        businessName: data.clientName,
-        documentNumber: data.clientNit,
-        documentType: 'CC',
-        email: data.clientEmail,
-        phone: data.clientPhone || '',
-        address: '',
-        fiscalRegime: 'ORDINARY'
+        razonSocial: data.clientName,
+        identificacion: data.clientNit,
+        tipoId: 'CC',
+        emailContacto: data.clientEmail,
+        telefonoContacto: data.clientPhone || '',
+        direccion: '',
+        regimenFiscal: 'Responsable de IVA',
+        departamento: '',
+        municipio: '',
+        dv: '0',
+        responsabilidades: 'R-99-PN',
+        nombreContacto: data.clientName
       },
       subtotal: data.totalAmount,
       totalTaxes: 0,

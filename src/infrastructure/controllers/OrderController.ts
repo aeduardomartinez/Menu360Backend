@@ -1,13 +1,15 @@
 import { Request, Response } from 'express';
 import { OrderService } from '../../application/services/OrderService';
 import { BillingService } from '../../application/services/BillingService';
+import { ClientService } from '../../application/services/ClientService';
 import { ClientDIAN } from '../../domain/models/Client';
 
 export class OrderController {
   // Controller for managing orders
   constructor(
     private orderService: OrderService,
-    private billingService: BillingService
+    private billingService: BillingService,
+    private clientService: ClientService
   ) {}
 
   createOrder = async (req: Request, res: Response) => {
@@ -55,26 +57,91 @@ export class OrderController {
   updateOrderStatus = async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const { status, paymentMethod, boxId } = req.body;
-      const updatedOrder = await this.orderService.updateOrderStatus(id, status, paymentMethod, boxId);
+      const { status, paymentMethod, boxId, requiresEInvoice, invoiceData, clientId, clientDoc } = req.body;
+      const restaurantId = req.user!.restaurantId;
+      const updatedOrder = await this.orderService.updateOrderStatus(id, restaurantId, status, paymentMethod, boxId);
       
       if (!updatedOrder) {
         return res.status(404).json({ error: 'Order not found' });
       }
 
-      // If status is DELIVERED, generate invoice (Simulated)
-      if (status === 'DELIVERED') {
-        const dummyClient: ClientDIAN = {
-          id: 'client-1',
-          documentType: 'CC',
-          documentNumber: '123456789',
-          businessName: updatedOrder.clientName,
-          address: updatedOrder.deliveryAddress,
-          phone: updatedOrder.clientPhone,
-          email: 'correo@ejemplo.com',
-          fiscalRegime: 'SIMPLIFIED'
-        };
-        await this.billingService.generateInvoice(updatedOrder, dummyClient);
+      // Si el pedido se marca como Entregado (DELIVERED) y se solicitó Facturación Electrónica
+      // inicia el proceso de recopilación de datos del cliente para enviarlos a la DIAN.
+      if (status === 'DELIVERED' && requiresEInvoice) {
+        let clientData: ClientDIAN;
+        
+        try {
+        // Prioridad 1: Usar los datos manuales del formulario de factura (invoiceData)
+        if (invoiceData) {
+          clientData = {
+            tipoPersona: invoiceData.tipoPersona || 'natural',
+            razonSocial: invoiceData.razonSocial || invoiceData.nombres || updatedOrder.clientName || '',
+            tipoId: invoiceData.tipoDocumento || 'CC',
+            identificacion: invoiceData.identificacion || '222222222222',
+            dv: invoiceData.dv || '0',
+            regimenFiscal: invoiceData.regimen || '',
+            responsabilidades: invoiceData.responsabilidades || '',
+            departamento: invoiceData.departamento || '',
+            municipio: invoiceData.municipio || '',
+            direccion: invoiceData.direccion || updatedOrder.deliveryAddress || '',
+            nombreContacto: invoiceData.nombres || updatedOrder.clientName || '',
+            telefonoContacto: invoiceData.telefono || updatedOrder.clientPhone || '',
+            emailContacto: invoiceData.email || ''
+          };
+        } else if (clientId) {
+          const dbClient = await this.clientService.searchClients(restaurantId, clientId);
+          const clientMatch = dbClient.find(c => c.id === clientId);
+          if (clientMatch) {
+            clientData = {
+              tipoPersona: "natural",
+              razonSocial: clientMatch.name || updatedOrder.clientName || '',
+              tipoId: clientMatch.documentType || 'CC',
+              identificacion: clientMatch.documentId || '222222222222',
+              dv: clientMatch.dv || '0',
+              regimenFiscal: clientMatch.regime || '',
+              responsabilidades: clientMatch.responsibilities || '',
+              departamento: clientMatch.department || '',
+              municipio: clientMatch.city || '',
+              direccion: clientMatch.address || updatedOrder.deliveryAddress || '',
+              nombreContacto: clientMatch.name || updatedOrder.clientName || '',
+              telefonoContacto: clientMatch.phone || updatedOrder.clientPhone || '',
+              emailContacto: clientMatch.email || ''
+            };
+          } else {
+            throw new Error("Client not found");
+          }
+        } else {
+          // Prioridad 3: Cliente genérico (Consumidor Final) si no se proveen datos
+          // Se usa el documento '222222222222' estipulado por defecto.
+          clientData = {
+            tipoPersona: "natural",
+            razonSocial: updatedOrder.clientName || 'Consumidor Final',
+            tipoId: 'CC',
+            identificacion: clientDoc || '222222222222',
+            dv: '0',
+            regimenFiscal: '',
+            responsabilidades: '',
+            departamento: '',
+            municipio: '',
+            direccion: updatedOrder.deliveryAddress || '',
+            nombreContacto: updatedOrder.clientName || '',
+            telefonoContacto: updatedOrder.clientPhone || '',
+            emailContacto: ''
+          };
+        }
+
+          // Una vez armada la data del cliente, llamamos asincrónicamente al servicio
+          // de facturación para no bloquear la respuesta inmediata de éxito al frontend.
+          this.billingService.generateInvoice(updatedOrder, clientData)
+            .catch(e => console.error("Fallo asincrónico al generar factura electrónica:", e));
+          
+        } catch (error) {
+          console.error("Error al preparar los datos del cliente para FE:", error);
+        }
+      } else if (status === 'CANCELLED') {
+        // Generar Nota de Crédito si existía una factura electrónica
+        this.billingService.generateCreditNote(id)
+          .catch(e => console.error("Error al generar Nota de Crédito:", e));
       }
 
       res.json(updatedOrder);
@@ -88,7 +155,8 @@ export class OrderController {
     try {
       const { id } = req.params;
       const { boxId } = req.body;
-      const revertedOrder = await this.orderService.revertOrder(id, boxId);
+      const restaurantId = req.user!.restaurantId;
+      const revertedOrder = await this.orderService.revertOrder(id, restaurantId, boxId);
 
       if (!revertedOrder) {
         return res.status(404).json({ error: 'Order not found or not in DELIVERED status' });
@@ -106,7 +174,8 @@ export class OrderController {
     try {
       const { id } = req.params;
       const { driverId } = req.body;
-      const updatedOrder = await this.orderService.assignDriver(id, driverId);
+      const restaurantId = req.user!.restaurantId;
+      const updatedOrder = await this.orderService.assignDriver(id, restaurantId, driverId);
       
       if (!updatedOrder) {
         return res.status(404).json({ error: 'Order not found' });

@@ -6,19 +6,24 @@ export class PrismaOrderRepository implements IOrderRepository {
   async findAll(restaurantId?: string): Promise<Order[]> {
     const orders = await prisma.order.findMany({
       where: restaurantId ? { restaurantId } : undefined,
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      include: { table: true, waitress: true }
     });
     return orders.map(this.mapToOrder);
   }
 
   async findById(id: string): Promise<Order | null> {
-    const order = await prisma.order.findUnique({ where: { id } });
+    const order = await prisma.order.findUnique({ 
+      where: { id },
+      include: { table: true, waitress: true }
+    });
     return order ? this.mapToOrder(order) : null;
   }
 
   async findByOrderNumber(orderNumber: number, restaurantId: string): Promise<Order | null> {
     const order = await prisma.order.findFirst({
-      where: { orderNumber, restaurantId }
+      where: { orderNumber, restaurantId },
+      include: { table: true, waitress: true }
     });
     return order ? this.mapToOrder(order) : null;
   }
@@ -53,16 +58,20 @@ export class PrismaOrderRepository implements IOrderRepository {
         orderType: orderData.orderType,
         origin: orderData.origin,
         orderNumber: orderData.orderNumber,
-      }
+        tableId: orderData.tableId,
+        waitressId: orderData.waitressId,
+      },
+      include: { table: true, waitress: true }
     });
     return this.mapToOrder(newOrder);
   }
 
-  async updateStatus(id: string, status: OrderStatus): Promise<Order | null> {
+  async updateStatus(id: string, restaurantId: string, status: OrderStatus): Promise<Order | null> {
     try {
       const updated = await prisma.order.update({
-        where: { id },
-        data: { status }
+        where: { id, restaurantId },
+        data: { status },
+        include: { table: true, waitress: true }
       });
       return this.mapToOrder(updated);
     } catch (e: any) {
@@ -71,11 +80,12 @@ export class PrismaOrderRepository implements IOrderRepository {
     }
   }
 
-  async assignDriver(id: string, driverId: string): Promise<Order | null> {
+  async assignDriver(id: string, restaurantId: string, driverId: string): Promise<Order | null> {
     try {
       const updated = await prisma.order.update({
-        where: { id },
-        data: { driverId }
+        where: { id, restaurantId },
+        data: { driverId },
+        include: { table: true, waitress: true }
       });
       return this.mapToOrder(updated);
     } catch (e: any) {
@@ -87,9 +97,32 @@ export class PrismaOrderRepository implements IOrderRepository {
   async findByDriverId(driverId: string): Promise<Order[]> {
     const orders = await prisma.order.findMany({
       where: { driverId },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      include: { table: true, waitress: true }
     });
     return orders.map(this.mapToOrder);
+  }
+
+  async cancelOldPendingOrders(hoursOld: number): Promise<number> {
+    const thresholdDate = new Date(Date.now() - hoursOld * 60 * 60 * 1000);
+    
+    try {
+      const result = await prisma.order.updateMany({
+        where: {
+          status: 'PENDING',
+          createdAt: {
+            lt: thresholdDate
+          }
+        },
+        data: {
+          status: 'CANCELLED'
+        }
+      });
+      return result.count;
+    } catch (e: any) {
+      console.error("Prisma cancelOldPendingOrders error:", e);
+      return 0;
+    }
   }
 
   private mapToOrder(data: any): Order {
@@ -111,6 +144,10 @@ export class PrismaOrderRepository implements IOrderRepository {
       origin: data.origin as any,
       orderNumber: data.orderNumber || undefined,
       driverId: data.driverId || undefined,
+      tableId: data.tableId || undefined,
+      tableName: data.table?.name || undefined,
+      waitressId: data.waitressId || undefined,
+      waitressName: data.waitress ? `${data.waitress.name || ''} ${data.waitress.lastName || ''}`.trim() : undefined,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt
     };

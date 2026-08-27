@@ -1,4 +1,6 @@
 import http from 'http';
+import https from 'https';
+import fs from 'fs';
 import express from 'express';
 // Trigger restart for new prisma client again
 import cors from 'cors';
@@ -6,11 +8,20 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { Server as SocketIOServer } from 'socket.io';
 import { setupRoutes } from './infrastructure/routes/api';
+import { xssCleaner } from './api/middlewares/xssCleaner';
 
 const PORT = process.env.PORT || 4000;
 
 const app = express();
-const httpServer = http.createServer(app);
+
+let httpServer: http.Server | https.Server;
+if (process.env.SSL_KEY_PATH && process.env.SSL_CERT_PATH) {
+  const privateKey = fs.readFileSync(process.env.SSL_KEY_PATH, 'utf8');
+  const certificate = fs.readFileSync(process.env.SSL_CERT_PATH, 'utf8');
+  httpServer = https.createServer({ key: privateKey, cert: certificate }, app);
+} else {
+  httpServer = http.createServer(app);
+}
 
 // === SEGURIDAD: RATE LIMITING ===
 // Límite general para evitar DDoS (máximo 300 peticiones cada 5 minutos por IP)
@@ -20,29 +31,20 @@ const generalLimiter = rateLimit({
   message: { error: 'Demasiadas peticiones desde esta IP, por favor intenta de nuevo después de 5 minutos' }
 });
 
-// === SEGURIDAD: CORS (Cross-Origin Resource Sharing) ===
-/* 
-  INSTRUCCIONES PARA PRODUCCIÓN:
-  Actualmente origin está en '*' (permite peticiones desde CUALQUIER lugar).
-  Cuando vayas a salir a producción (menu360.com o .es), descomenta la siguiente lista 
-  y reemplaza en app.use(cors(...)) y en la configuración de Socket.io.
-  
-  const allowedOrigins = ['https://menu360.com', 'https://www.menu360.com', 'http://localhost:5173'];
-  const corsOptions = {
-    origin: function (origin: any, callback: any) {
-      if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-        callback(null, true);
-      } else {
-        callback(new Error('No permitido por CORS'));
-      }
-    },
-    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE']
-  };
-*/
-// Para pruebas por ahora, lo mantenemos abierto, pero YA TIENES el código arriba para limitarlo.
+// CORS Configurado Estrictamente para Localhost (Pruebas Locales)
+// Solo permite que el Frontend que corre en Vite en el puerto 5173 (u otros puertos de localhost)
+// se conecte al servidor. Rechaza cualquier otro dominio en internet.
+const allowedOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
 const corsOptions = {
-  origin: '*', 
-  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE']
+  origin: function (origin: any, callback: any) {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1 || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1') || origin.startsWith('http://192.168')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Bloqueado por CORS: Origen no autorizado'));
+    }
+  },
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
+  credentials: true
 };
 
 const io = new SocketIOServer(httpServer, {
@@ -64,6 +66,32 @@ app.use(generalLimiter);
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ limit: '2mb', extended: true }));
 
+// Limpiar inyecciones XSS de todo el payload
+app.use(xssCleaner);
+
+// === INTERCEPTOR DE ERRORES DE BASE DE DATOS ===
+// Captura respuestas de error 500 generadas por los controladores y 
+// formatea el mensaje si se detecta un error de conexión de Prisma.
+app.use((req, res, next) => {
+  const originalJson = res.json;
+  res.json = function (body) {
+    if (res.statusCode >= 500 && body && body.error && typeof body.error === 'string') {
+      const errorStr = body.error.toLowerCase();
+      if (
+        errorStr.includes('prismaclientinitializationerror') || 
+        errorStr.includes('can\'t reach database server') || 
+        errorStr.includes('connect to database') || 
+        errorStr.includes('connection pool') ||
+        errorStr.includes('econnrefused')
+      ) {
+        body.error = 'No hay conexión con la base de datos. Por favor intenta más tarde o contacta al administrador.';
+      }
+    }
+    return originalJson.call(this, body);
+  };
+  next();
+});
+
 app.use('/api', setupRoutes(io));
 
 io.on('connection', (socket) => {
@@ -75,5 +103,6 @@ io.on('connection', (socket) => {
 });
 
 httpServer.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  const protocol = (process.env.SSL_KEY_PATH && process.env.SSL_CERT_PATH) ? 'HTTPS' : 'HTTP';
+  console.log(`🔒 Server is running on port ${PORT} using ${protocol}`);
 });

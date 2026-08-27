@@ -10,5 +10,7 @@ router.use(authenticateToken);
 router.post('/restaurants', SuperAdminController.createRestaurant);
 router.get('/restaurants', SuperAdminController.getRestaurants);
 router.delete('/restaurants/:id', SuperAdminController.deleteRestaurant);
+router.put('/restaurants/:id/plan', SuperAdminController.updateRestaurantPlan);
+router.put('/restaurants/:id/billing', SuperAdminController.updateRestaurantBilling);
 
 export default router;

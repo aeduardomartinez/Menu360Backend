@@ -45,7 +45,8 @@ export class MenuController {
     try {
       const { id } = req.params;
       const { isAvailable } = req.body;
-      const updatedProduct = await this.menuService.toggleProductAvailability(id, isAvailable);
+      const restaurantId = req.user!.restaurantId;
+      const updatedProduct = await this.menuService.toggleProductAvailability(id, restaurantId, isAvailable);
       
       if (!updatedProduct) {
         return res.status(404).json({ error: 'Product not found' });
@@ -61,8 +62,9 @@ export class MenuController {
     try {
       const { id } = req.params;
       const productData = req.body;
+      const restaurantId = req.user!.restaurantId;
       
-      const updatedProduct = await this.menuService.updateProduct(id, productData);
+      const updatedProduct = await this.menuService.updateProduct(id, restaurantId, productData);
       
       if (!updatedProduct) {
         return res.status(404).json({ error: 'Product not found' });
@@ -77,8 +79,9 @@ export class MenuController {
   deleteProduct = async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
+      const restaurantId = req.user!.restaurantId;
       
-      const deleted = await this.menuService.deleteProduct(id);
+      const deleted = await this.menuService.deleteProduct(id, restaurantId);
       
       if (!deleted) {
         return res.status(404).json({ error: 'Product not found' });

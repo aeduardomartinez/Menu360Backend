@@ -2,6 +2,9 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User, UserRole } from '../../domain/models/User';
 import { PrismaUserRepository } from '../../infrastructure/repositories/PrismaUserRepository';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-for-dev';
 const JWT_EXPIRES_IN = '24h';
@@ -37,6 +40,13 @@ export class AuthService {
     const isValidPassword = await bcrypt.compare(password, user.passwordHash);
     if (!isValidPassword) {
       throw new Error('Invalid email or password');
+    }
+
+    if (user.role !== 'SUPERADMIN' && user.restaurantId) {
+      const restaurant = await prisma.restaurant.findUnique({ where: { id: user.restaurantId } });
+      if (restaurant?.isBlocked) {
+        throw new Error('La cuenta ha sido suspendida por falta de pago. Por favor contacte a soporte.');
+      }
     }
 
     const token = jwt.sign(

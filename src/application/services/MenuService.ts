@@ -17,15 +17,15 @@ export class MenuService {
     return this.productRepository.create(productData);
   }
 
-  async toggleProductAvailability(id: string, isAvailable: boolean): Promise<Product | null> {
-    return this.productRepository.updateAvailability(id, isAvailable);
+  async toggleProductAvailability(id: string, restaurantId: string, isAvailable: boolean): Promise<Product | null> {
+    return this.productRepository.updateAvailability(id, restaurantId, isAvailable);
   }
 
-  async updateProduct(id: string, productData: Partial<Product>): Promise<Product | null> {
-    return this.productRepository.update(id, productData);
+  async updateProduct(id: string, restaurantId: string, productData: Partial<Product>): Promise<Product | null> {
+    return this.productRepository.update(id, restaurantId, productData);
   }
 
-  async deleteProduct(id: string): Promise<boolean> {
-    return this.productRepository.delete(id);
+  async deleteProduct(id: string, restaurantId: string): Promise<boolean> {
+    return this.productRepository.delete(id, restaurantId);
   }
 }

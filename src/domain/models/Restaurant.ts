@@ -26,4 +26,9 @@ export interface Restaurant {
   minimumOrderAmount?: number;
   schedule?: any;
   titleEffect?: string;
+  iconColor?: string;
+  iconStyle?: string;
+  planType?: string;
+  taxType?: string | null;
+  taxRate?: number | null;
 }

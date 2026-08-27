@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 export const SuperAdminController = {
   async createRestaurant(req: Request, res: Response) {
     try {
-      const { restaurantName, ownerName, ownerEmail, password } = req.body;
+      const { restaurantName, ownerName, ownerEmail, password, planType, paymentStatus, paymentFrequency, paymentAmount } = req.body;
       const userRole = req.user?.role;
 
       if (userRole !== 'SUPERADMIN') {
@@ -41,7 +41,12 @@ export const SuperAdminController = {
             slug,
             name: restaurantName,
             themeColor: '#0d6efd',
-            adminThemeColor: '#0d6efd'
+            adminThemeColor: '#0d6efd',
+            planType: planType || 'ADVANCED',
+            paymentStatus: paymentStatus || 'PAID',
+            paymentFrequency: paymentFrequency || 'MONTHLY',
+            paymentAmount: paymentAmount ? parseFloat(paymentAmount) : 0,
+            isBlocked: false
           }
         });
 
@@ -134,10 +139,61 @@ export const SuperAdminController = {
         await tx.restaurant.delete({ where: { id } });
       });
 
-      return res.status(200).json({ message: 'Restaurante eliminado exitosamente' });
+      return res.status(200).json({ message: 'Restaurante eliminado correctamente' });
     } catch (error: any) {
-      console.error('Error deleting restaurant:', error);
-      return res.status(500).json({ error: 'Error interno del servidor al eliminar el restaurante' });
+      console.error(error);
+      return res.status(500).json({ error: 'Error interno al eliminar negocio' });
+    }
+  },
+
+  async updateRestaurantPlan(req: Request, res: Response) {
+    try {
+      if (req.user?.role !== 'SUPERADMIN') {
+        return res.status(403).json({ error: 'Solo el SUPERADMIN puede modificar planes' });
+      }
+
+      const { id } = req.params;
+      const { planType } = req.body;
+
+      if (!['BASIC', 'ADVANCED'].includes(planType)) {
+        return res.status(400).json({ error: 'Plan inválido' });
+      }
+
+      const updated = await prisma.restaurant.update({
+        where: { id },
+        data: { planType }
+      });
+
+      return res.status(200).json({ message: 'Plan actualizado', restaurant: updated });
+    } catch (error: any) {
+      console.error(error);
+      return res.status(500).json({ error: 'Error interno al actualizar plan' });
+    }
+  },
+
+  async updateRestaurantBilling(req: Request, res: Response) {
+    try {
+      if (req.user?.role !== 'SUPERADMIN') {
+        return res.status(403).json({ error: 'Solo el SUPERADMIN puede modificar facturación' });
+      }
+
+      const { id } = req.params;
+      const { paymentStatus, paymentFrequency, paymentAmount, isBlocked } = req.body;
+
+      const updated = await prisma.restaurant.update({
+        where: { id },
+        data: {
+          paymentStatus,
+          paymentFrequency,
+          paymentAmount: paymentAmount ? parseFloat(paymentAmount) : undefined,
+          isBlocked: typeof isBlocked === 'boolean' ? isBlocked : undefined
+        }
+      });
+
+      return res.status(200).json({ message: 'Datos de facturación actualizados', restaurant: updated });
+    } catch (error: any) {
+      console.error(error);
+      return res.status(500).json({ error: 'Error interno al actualizar facturación' });
     }
   }
 };

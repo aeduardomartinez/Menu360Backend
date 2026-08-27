@@ -43,6 +43,8 @@ export class PrismaRestaurantRepository implements IRestaurantRepository {
         minimumOrderAmount: restaurant.minimumOrderAmount,
         schedule: restaurant.schedule ? JSON.parse(JSON.stringify(restaurant.schedule)) : undefined,
         titleEffect: restaurant.titleEffect,
+        iconColor: restaurant.iconColor,
+        iconStyle: restaurant.iconStyle,
       },
       create: {
         id: restaurant.id,
@@ -72,6 +74,8 @@ export class PrismaRestaurantRepository implements IRestaurantRepository {
         minimumOrderAmount: restaurant.minimumOrderAmount,
         schedule: restaurant.schedule ? JSON.parse(JSON.stringify(restaurant.schedule)) : undefined,
         titleEffect: restaurant.titleEffect,
+        iconColor: restaurant.iconColor,
+        iconStyle: restaurant.iconStyle,
       }
     });
     return updated as Restaurant;

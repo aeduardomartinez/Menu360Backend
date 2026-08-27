@@ -7,6 +7,8 @@ generator client {
   provider = "prisma-client-js"
 }
 
+/// Almacena la configuración principal de cada Restaurante (Multi-Tenant).
+/// Contiene datos de personalización, horarios, redes sociales y preferencias del local.
 model Restaurant {
   id                String   @id @default(uuid())
   slug              String   @unique
@@ -35,6 +37,16 @@ model Restaurant {
   minimumOrderAmount    Float?
   schedule              Json?
   titleEffect           String?  @default("animate-none")
+  iconColor             String?  @default("#facc15")
+  iconStyle             String?  @default("outline")
+  kitchenAlertMinutes   Int?     @default(15)
+  planType              String   @default("ADVANCED") // 'BASIC' | 'ADVANCED'
+  taxType               String?  @default("NONE")     // 'INC' | 'IVA' | 'NONE'
+  taxRate               Float?   @default(0)          // e.g., 0.08, 0.19
+  paymentStatus         String?  @default("PAID")     // 'PAID' | 'PENDING'
+  paymentFrequency      String?  @default("MONTHLY")  // 'MONTHLY' | 'QUARTERLY'
+  paymentAmount         Float?   @default(0)
+  isBlocked             Boolean? @default(false)
 
   users             User[]
   boxes             Box[]
@@ -46,8 +58,12 @@ model Restaurant {
   modifierCategories ModifierCategory[]
   coupons           Coupon[]
   boxSessions       BoxSession[]
+  tables            Table[]
+  clients           Client[]
 }
 
+/// Gestiona los usuarios del sistema que operan el restaurante.
+/// Almacena credenciales, roles (Admin, Cajero, Mesero) y datos personales del staff.
 model User {
   id           String      @id @default(uuid())
   restaurantId String?
@@ -64,8 +80,11 @@ model User {
 
   boxes        Box[]        @relation("AssignedBoxes")
   boxSessions  BoxSession[]
+  orders       Order[]      @relation("WaitressOrders")
 }
 
+/// Representa una Caja Registradora física o virtual dentro del restaurante.
+/// Guarda el estado actual de la caja (abierta/cerrada) y el balance de dinero en curso.
 model Box {
   id             String     @id @default(uuid())
   restaurantId   String
@@ -84,6 +103,8 @@ model Box {
   sessions       BoxSession[]
 }
 
+/// Registra el historial de turnos o jornadas de cada Caja Registradora.
+/// Almacena con cuánto dinero abre, cuánto se factura en el sistema y los descuadres al cerrar.
 model BoxSession {
   id             String     @id @default(uuid())
   boxId          String
@@ -102,6 +123,8 @@ model BoxSession {
   createdAt      DateTime   @default(now())
 }
 
+/// Clasifica los productos del menú (Ej: Bebidas, Platos Fuertes, Postres).
+/// Guarda el nombre de la categoría y el orden en el que se muestra en el menú digital.
 model Category {
   id           String     @id @default(uuid())
   restaurantId String
@@ -110,6 +133,8 @@ model Category {
   orderIndex   Int
 }
 
+/// Contiene el catálogo de ítems a la venta en el restaurante.
+/// Almacena precios, imágenes, descripciones, control de inventario y modificadores permitidos.
 model Product {
   id           String     @id @default(uuid())
   restaurantId String
@@ -130,6 +155,8 @@ model Product {
   updatedAt    DateTime   @updatedAt
 }
 
+/// Registra las ventas y pedidos realizados por los clientes.
+/// Guarda los productos comprados, datos de entrega, total a pagar, método de pago y estado del pedido.
 model Order {
   id              String     @id @default(uuid())
   restaurantId    String
@@ -149,10 +176,30 @@ model Order {
   origin          String?
   orderNumber     Int?
   driverId        String?
+  tableId         String?
+  table           Table?     @relation(fields: [tableId], references: [id])
+  waitressId      String?
+  waitress        User?      @relation("WaitressOrders", fields: [waitressId], references: [id])
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 }
 
+/// Define las mesas físicas disponibles en el restaurante.
+/// Almacena la capacidad de comensales y permite asociar pedidos directamente a una mesa.
+model Table {
+  id           String     @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  name         String
+  capacity     Int?
+  isActive     Boolean    @default(true)
+  orders       Order[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+/// Historial de movimientos financieros (Ingresos y Egresos).
+/// Útil para la contabilidad del restaurante, guardando el concepto, monto y método de pago.
 model FinancialRecord {
   id            String     @id @default(uuid())
   restaurantId  String
@@ -168,6 +215,8 @@ model FinancialRecord {
   createdAt     DateTime   @default(now())
 }
 
+/// Registra las Facturas Electrónicas generadas (Integración DIAN).
+/// Almacena el cliente facturado, los montos totales, impuestos e identificadores tributarios.
 model Invoice {
   id            String     @id @default(uuid())
   restaurantId  String
@@ -184,6 +233,8 @@ model Invoice {
   issuedAt      DateTime   @default(now())
 }
 
+/// Agrupa opciones o variaciones que se le pueden añadir a un producto (Ej: "Término de la carne", "Salsas extra").
+/// Define si la elección es obligatoria, única o múltiple.
 model ModifierCategory {
   id           String     @id @default(uuid())
   restaurantId String
@@ -194,6 +245,8 @@ model ModifierCategory {
   options      Json
 }
 
+/// Sistema de promociones y descuentos.
+/// Almacena los códigos de cupones, el porcentaje de descuento y si están activos o expirados.
 model Coupon {
   id                 String     @id @default(uuid())
   restaurantId       String
@@ -205,5 +258,28 @@ model Coupon {
   updatedAt          DateTime   @updatedAt
 
   @@unique([restaurantId, code])
+}
+
+/// Base de datos de Clientes frecuentes y datos para facturación.
+/// Guarda información de contacto e información tributaria (NIT, Régimen) para autocompletado en facturas.
+model Client {
+  id           String     @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  name             String
+  phone            String?
+  email            String?
+  birthDate        DateTime?
+  documentType     String? // Cédula, NIT, etc.
+  documentId       String? // Número
+  dv               String?
+  regime           String?
+  responsibilities String?
+  department       String?
+  city             String?
+  address          String?
+  neighborhood     String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 }
 

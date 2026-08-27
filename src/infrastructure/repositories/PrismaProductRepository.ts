@@ -39,7 +39,7 @@ export class PrismaProductRepository implements IProductRepository {
     return this.mapToProduct(newProduct);
   }
 
-  async update(id: string, productData: Partial<Product>): Promise<Product | null> {
+  async update(id: string, restaurantId: string, productData: Partial<Product>): Promise<Product | null> {
     const data: any = { ...productData };
     if (data.variants !== undefined) data.variants = data.variants as any;
     
@@ -47,35 +47,42 @@ export class PrismaProductRepository implements IProductRepository {
     delete data.id;
     delete data.createdAt;
     delete data.updatedAt;
+    delete data.pricingType;
+    delete data.restaurant;
 
     try {
-      const updated = await prisma.product.update({
-        where: { id },
+      const { count } = await prisma.product.updateMany({
+        where: { id, restaurantId },
         data
       });
-      return this.mapToProduct(updated);
-    } catch {
+      if (count === 0) return null;
+      return this.findById(id);
+    } catch (e) {
+      console.error(e);
       return null;
     }
   }
 
-  async updateAvailability(id: string, isAvailable: boolean): Promise<Product | null> {
+  async updateAvailability(id: string, restaurantId: string, isAvailable: boolean): Promise<Product | null> {
     try {
-      const updated = await prisma.product.update({
-        where: { id },
+      const { count } = await prisma.product.updateMany({
+        where: { id, restaurantId },
         data: { isAvailable }
       });
-      return this.mapToProduct(updated);
-    } catch {
+      if (count === 0) return null;
+      return this.findById(id);
+    } catch (e) {
+      console.error(e);
       return null;
     }
   }
 
-  async delete(id: string): Promise<boolean> {
+  async delete(id: string, restaurantId: string): Promise<boolean> {
     try {
-      await prisma.product.delete({ where: { id } });
-      return true;
-    } catch {
+      const { count } = await prisma.product.deleteMany({ where: { id, restaurantId } });
+      return count > 0;
+    } catch (e) {
+      console.error(e);
       return false;
     }
   }

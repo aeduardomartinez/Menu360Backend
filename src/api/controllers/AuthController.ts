@@ -13,6 +13,9 @@ export const AuthController = {
       const result = await authService.login(email, password);
       return res.status(200).json(result);
     } catch (error: any) {
+      if (error.message?.includes("Can't reach database server") || error.code === 'P1001' || error.message?.includes('ECONNREFUSED')) {
+        return res.status(503).json({ error: 'No hay conexión con la base de datos. Por favor, intenta de nuevo más tarde.' });
+      }
       return res.status(401).json({ error: error.message });
     }
   },
@@ -39,8 +42,16 @@ export const AuthController = {
         return res.status(400).json({ error: 'Name, email, password, and role are required' });
       }
 
-      if (role !== 'CASHIER' && role !== 'DELIVERY') {
+      const allowedRoles = ['CASHIER', 'DELIVERY', 'WAITRESS', 'KITCHEN'];
+      if (!allowedRoles.includes(role)) {
         return res.status(400).json({ error: 'Invalid role' });
+      }
+
+      // Validar según el plan
+      const prisma = new (require('@prisma/client').PrismaClient)();
+      const restaurant = await prisma.restaurant.findUnique({ where: { id: adminRestaurantId } });
+      if (restaurant?.planType === 'BASIC' && (role === 'WAITRESS' || role === 'KITCHEN')) {
+        return res.status(403).json({ error: 'Tu plan actual no permite crear este tipo de usuarios' });
       }
 
       const newUser = await authService.createUser(
@@ -67,8 +78,13 @@ export const AuthController = {
       const adminRestaurantId = req.user?.restaurantId;
       const adminRole = req.user?.role;
 
-      if (!adminRestaurantId || adminRole !== 'ADMIN') {
-        return res.status(403).json({ error: 'Only admins can view staff' });
+      if (!adminRestaurantId) {
+        return res.status(403).json({ error: 'Not associated with a restaurant' });
+      }
+      
+      const allowedRoles = ['ADMIN', 'CASHIER', 'WAITRESS'];
+      if (!adminRole || !allowedRoles.includes(adminRole)) {
+        return res.status(403).json({ error: 'Unauthorized to view staff' });
       }
 
       const users = await authService.getUserRepository().findByRestaurantId(adminRestaurantId);
