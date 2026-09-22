@@ -7,8 +7,11 @@ export class PrismaBoxRepository {
     return boxes.map(this.mapToBox);
   }
 
-  async findById(id: string): Promise<Box | undefined> {
-    const box = await prisma.box.findUnique({ where: { id } });
+  // El restaurantId es opcional solo para usos internos de confianza (por
+  // ejemplo, otro repositorio ya validado). Cualquier ruta HTTP debe pasarlo
+  // siempre, para no devolver una caja de otro restaurante por solo conocer su id.
+  async findById(id: string, restaurantId?: string): Promise<Box | undefined> {
+    const box = await prisma.box.findUnique({ where: restaurantId ? { id, restaurantId } : { id } });
     return box ? this.mapToBox(box) : undefined;
   }
 
@@ -36,8 +39,8 @@ export class PrismaBoxRepository {
     return this.mapToBox(newBox);
   }
 
-  async update(id: string, updates: Partial<Box>): Promise<Box | null> {
-    const existing = await prisma.box.findUnique({ where: { id } });
+  async update(id: string, restaurantId: string, updates: Partial<Box>): Promise<Box | null> {
+    const existing = await prisma.box.findUnique({ where: { id, restaurantId } });
     if (!existing) return null;
 
     const data: any = { ...updates };
@@ -47,14 +50,14 @@ export class PrismaBoxRepository {
     if (updates.updatedAt) data.updatedAt = new Date(updates.updatedAt);
 
     const updated = await prisma.box.update({
-      where: { id },
+      where: { id, restaurantId },
       data
     });
     return this.mapToBox(updated);
   }
 
-  async delete(id: string): Promise<void> {
-    await prisma.box.delete({ where: { id } });
+  async delete(id: string, restaurantId: string): Promise<void> {
+    await prisma.box.delete({ where: { id, restaurantId } });
   }
 
   private mapToBox(data: any): Box {

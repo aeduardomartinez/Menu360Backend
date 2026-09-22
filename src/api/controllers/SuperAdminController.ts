@@ -171,6 +171,31 @@ export const SuperAdminController = {
     }
   },
 
+  async updateRestaurantEInvoice(req: Request, res: Response) {
+    try {
+      if (req.user?.role !== 'SUPERADMIN') {
+        return res.status(403).json({ error: 'Solo el SUPERADMIN puede activar o desactivar la facturación electrónica' });
+      }
+
+      const { id } = req.params;
+      const { eInvoiceEnabled } = req.body;
+
+      if (typeof eInvoiceEnabled !== 'boolean') {
+        return res.status(400).json({ error: 'eInvoiceEnabled debe ser true o false' });
+      }
+
+      const updated = await prisma.restaurant.update({
+        where: { id },
+        data: { eInvoiceEnabled }
+      });
+
+      return res.status(200).json({ message: 'Facturación electrónica actualizada', restaurant: updated });
+    } catch (error: any) {
+      console.error(error);
+      return res.status(500).json({ error: 'Error interno al actualizar la facturación electrónica' });
+    }
+  },
+
   async updateRestaurantBilling(req: Request, res: Response) {
     try {
       if (req.user?.role !== 'SUPERADMIN') {

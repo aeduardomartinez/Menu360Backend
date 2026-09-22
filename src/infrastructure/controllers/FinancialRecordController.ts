@@ -6,7 +6,11 @@ export class FinancialRecordController {
 
   createRecord = async (req: Request, res: Response): Promise<void> => {
     try {
-      const record = await this.service.createRecord(req.body);
+      // El restaurante siempre sale del token verificado, no de lo que mande
+      // el cliente — si no, cualquier cajero podría inyectar movimientos en
+      // la contabilidad de otro restaurante.
+      const restaurantId = req.user!.restaurantId;
+      const record = await this.service.createRecord({ ...req.body, restaurantId });
       res.status(201).json(record);
     } catch (error) {
       res.status(400).json({ error: (error as Error).message });
@@ -16,6 +20,10 @@ export class FinancialRecordController {
   getRecords = async (req: Request, res: Response): Promise<void> => {
     try {
       const { restaurantId } = req.params;
+      if (restaurantId !== req.user?.restaurantId) {
+        res.status(403).json({ error: 'No tienes acceso a la contabilidad de otro restaurante.' });
+        return;
+      }
       const records = await this.service.getRecordsByRestaurant(restaurantId);
       res.status(200).json(records);
     } catch (error) {
@@ -26,6 +34,10 @@ export class FinancialRecordController {
   exportRecordsCSV = async (req: Request, res: Response): Promise<void> => {
     try {
       const { restaurantId } = req.params;
+      if (restaurantId !== req.user?.restaurantId) {
+        res.status(403).json({ error: 'No tienes acceso a la contabilidad de otro restaurante.' });
+        return;
+      }
       const records = await this.service.getRecordsByRestaurant(restaurantId);
       
       const header = ['ID', 'Fecha', 'Tipo', 'Categoría', 'Método Pago', 'Monto', 'Descripción'];

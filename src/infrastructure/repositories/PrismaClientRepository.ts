@@ -28,7 +28,8 @@ export class PrismaClientRepository implements IClientRepository {
         restaurantId,
         OR: [
           { name: { contains: query, mode: 'insensitive' } },
-          { phone: { contains: query } }
+          { phone: { contains: query } },
+          { documentId: { contains: query } }
         ]
       },
       take: 10,
@@ -41,6 +42,15 @@ export class PrismaClientRepository implements IClientRepository {
       where: {
         restaurantId,
         phone
+      }
+    });
+  }
+
+  async findByDocumentId(restaurantId: string, documentId: string): Promise<Client | null> {
+    return prisma.client.findFirst({
+      where: {
+        restaurantId,
+        documentId
       }
     });
   }

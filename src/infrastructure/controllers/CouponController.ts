@@ -6,6 +6,9 @@ export class CouponController {
   getCoupons = async (req: Request, res: Response) => {
     try {
       const { restaurantId } = req.params;
+      if (restaurantId !== req.user?.restaurantId) {
+        return res.status(403).json({ error: 'No tienes acceso a los cupones de otro restaurante.' });
+      }
       const coupons = await prisma.coupon.findMany({
         where: { restaurantId },
         orderBy: { createdAt: 'desc' }
@@ -18,7 +21,8 @@ export class CouponController {
 
   createCoupon = async (req: Request, res: Response) => {
     try {
-      const { restaurantId } = req.params;
+      // El restaurante siempre sale del token, no de la URL.
+      const restaurantId = req.user!.restaurantId;
       const { code, discountPercentage, isActive } = req.body;
       
       const existing = await prisma.coupon.findFirst({
@@ -46,9 +50,10 @@ export class CouponController {
   toggleCoupon = async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
+      const restaurantId = req.user!.restaurantId;
       const { isActive } = req.body;
       const coupon = await prisma.coupon.update({
-        where: { id },
+        where: { id, restaurantId },
         data: { isActive }
       });
       res.json(coupon);
@@ -60,7 +65,8 @@ export class CouponController {
   deleteCoupon = async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      await prisma.coupon.delete({ where: { id } });
+      const restaurantId = req.user!.restaurantId;
+      await prisma.coupon.delete({ where: { id, restaurantId } });
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: 'Error deleting coupon' });

@@ -6,7 +6,15 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-for-dev';
+// Mismo criterio que en AuthMiddleware: sin valor de respaldo. Antes había un
+// fallback distinto aquí ('fallback-secret-for-dev') al de AuthMiddleware
+// ('super-secret-key-for-demo-purposes-only'), así que si la variable de
+// entorno alguna vez faltaba, los tokens firmados y los validados podían
+// terminar usando secretos distintos. Ahora, sin la variable configurada, el
+// servidor no arranca.
+const JWT_SECRET: string = process.env.JWT_SECRET || (() => {
+  throw new Error('JWT_SECRET no está configurado. Defínelo en las variables de entorno antes de iniciar el servidor.');
+})();
 const JWT_EXPIRES_IN = '24h';
 
 
@@ -15,15 +23,57 @@ export class AuthService {
 
   constructor() {
     this.userRepository = new PrismaUserRepository();
-    this.seedDemoAdmin();
+    this.sembrarAdminInicial();
   }
 
-  private async seedDemoAdmin() {
+  /**
+   * Crea el primer administrador si no existe.
+   *
+   * Antes esto creaba siempre admin@demo.com / admin123 con rol ADMIN, en cada
+   * arranque y en cualquier entorno. En local es cómodo; publicado en internet
+   * es una puerta abierta con la contraseña escrita en el código fuente, y el
+   * atacante no necesita adivinar nada. Por eso ahora:
+   *
+   *  - En producción NO se crea ningún usuario de demostración. Si se quiere
+   *    sembrar el primer administrador real, se definen SEED_ADMIN_EMAIL y
+   *    SEED_ADMIN_PASSWORD (y opcionalmente SEED_ADMIN_RESTAURANT_ID) en el
+   *    entorno, se arranca una vez, y se borran esas variables después.
+   *  - Fuera de producción se mantiene el usuario de demostración, porque ahí
+   *    sí ahorra trabajo y no hay nada que proteger.
+   */
+  private async sembrarAdminInicial() {
+    const esProduccion = process.env.NODE_ENV === 'production';
+    const email = process.env.SEED_ADMIN_EMAIL;
+    const password = process.env.SEED_ADMIN_PASSWORD;
+    const restaurantId = process.env.SEED_ADMIN_RESTAURANT_ID || 'rest-1';
+
+    if (email && password) {
+      if (password.length < 12) {
+        console.error(
+          '[seed] SEED_ADMIN_PASSWORD es demasiado corta (mínimo 12 caracteres). No se creó el administrador.'
+        );
+        return;
+      }
+      try {
+        await this.createUser('Administrador', email, password, 'ADMIN', restaurantId);
+        console.log(`[seed] Administrador inicial creado: ${email}`);
+        console.log('[seed] Borra SEED_ADMIN_EMAIL y SEED_ADMIN_PASSWORD del entorno ahora que ya existe.');
+      } catch (e) {
+        console.log(`[seed] El administrador ${email} ya existía; no se hizo nada.`);
+      }
+      return;
+    }
+
+    if (esProduccion) {
+      // Silencio deliberado: en producción no se crean usuarios solos.
+      return;
+    }
+
     try {
       await this.createUser('Admin Demo', 'admin@demo.com', 'admin123', 'ADMIN', 'rest-1');
-      console.log('Demo admin user created: admin@demo.com / admin123');
+      console.log('Usuario de demostración creado (solo en desarrollo): admin@demo.com / admin123');
     } catch (e) {
-      console.log('Demo admin user already exists');
+      console.log('Usuario de demostración ya existe (solo en desarrollo)');
     }
   }
 
@@ -130,6 +180,32 @@ export class AuthService {
 
     user.updatedAt = new Date();
     return await this.userRepository.save(user);
+  }
+
+  // Cambio de contraseña propio, disponible para cualquier rol autenticado
+  // (incluido SUPERADMIN, que no pertenece a ningún restaurante). A
+  // diferencia de updateUser (pensado para que un ADMIN edite a su propio
+  // personal), aquí no se compara restaurantId — el usuario solo puede
+  // cambiar SU PROPIA contraseña, identificada por el id del token, y debe
+  // confirmar la contraseña actual antes de poder cambiarla.
+  async changeOwnPassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new Error('Usuario no encontrado');
+    }
+
+    const isCurrentValid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isCurrentValid) {
+      throw new Error('La contraseña actual no es correcta');
+    }
+
+    if (newPassword.length < 6) {
+      throw new Error('La nueva contraseña debe tener al menos 6 caracteres');
+    }
+
+    user.passwordHash = await bcrypt.hash(newPassword, 10);
+    user.updatedAt = new Date();
+    await this.userRepository.save(user);
   }
 }
 

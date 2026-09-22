@@ -6,9 +6,24 @@ export class ClientController {
 
   createClient = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { restaurantId } = req.params;
+      // El restaurante siempre sale del token verificado, no de la URL.
+      const restaurantId = req.user!.restaurantId;
       const client = await this.service.createClient({ ...req.body, restaurantId });
       res.status(201).json(client);
+    } catch (error) {
+      res.status(400).json({ error: (error as Error).message });
+    }
+  };
+
+  updateClient = async (req: Request, res: Response): Promise<void> => {
+    try {
+      // El restaurante siempre sale del token verificado, no de la URL (igual
+      // que en createClient) — evita que alguien edite clientes de otro
+      // restaurante solo cambiando el :restaurantId en la URL.
+      const restaurantId = req.user!.restaurantId;
+      const { clientId } = req.params;
+      const client = await this.service.updateClient(clientId, restaurantId, req.body);
+      res.status(200).json(client);
     } catch (error) {
       res.status(400).json({ error: (error as Error).message });
     }
@@ -17,6 +32,10 @@ export class ClientController {
   searchClients = async (req: Request, res: Response): Promise<void> => {
     try {
       const { restaurantId } = req.params;
+      if (restaurantId !== req.user?.restaurantId) {
+        res.status(403).json({ error: 'No tienes acceso a los clientes de otro restaurante.' });
+        return;
+      }
       const { q } = req.query;
       const queryStr = q ? String(q) : '';
 

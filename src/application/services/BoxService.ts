@@ -28,12 +28,12 @@ export class BoxService {
     return this.repository.create(newBox);
   }
 
-  async updateBox(id: string, updates: Partial<Box>): Promise<Box | null> {
-    return this.repository.update(id, updates);
+  async updateBox(id: string, restaurantId: string, updates: Partial<Box>): Promise<Box | null> {
+    return this.repository.update(id, restaurantId, updates);
   }
 
-  async openBox(id: string, initialAmount: number): Promise<Box | null> {
-    return this.repository.update(id, {
+  async openBox(id: string, restaurantId: string, initialAmount: number): Promise<Box | null> {
+    return this.repository.update(id, restaurantId, {
       status: 'OPEN',
       openedAt: new Date().toISOString(),
       closedAt: null,
@@ -41,8 +41,8 @@ export class BoxService {
     });
   }
 
-  async closeBox(id: string, data: any): Promise<Box | null> {
-    const box = await this.repository.findById(id);
+  async closeBox(id: string, restaurantId: string, data: any): Promise<Box | null> {
+    const box = await this.repository.findById(id, restaurantId);
     if (!box) return null;
 
     const closedAt = new Date();
@@ -64,22 +64,22 @@ export class BoxService {
       }
     });
 
-    return this.repository.update(id, {
+    return this.repository.update(id, restaurantId, {
       status: 'CLOSED',
       closedAt: closedAt.toISOString()
     });
   }
 
-  async deleteBox(id: string): Promise<void> {
-    const box = await this.repository.findById(id);
+  async deleteBox(id: string, restaurantId: string): Promise<void> {
+    const box = await this.repository.findById(id, restaurantId);
     if (!box) throw new Error('Box not found');
-    
+
     // Check if box has sessions
-    const sessionCount = await prisma.boxSession.count({ where: { boxId: id } });
+    const sessionCount = await prisma.boxSession.count({ where: { boxId: id, restaurantId } });
     if (sessionCount > 0) {
       throw new Error('No se puede eliminar la caja porque tiene un historial de sesiones asociado.');
     }
 
-    await this.repository.delete(id);
+    await this.repository.delete(id, restaurantId);
   }
 }

@@ -29,15 +29,15 @@ export class PrismaModifierRepository {
     return mapped.filter(m => m.associatedProductIds.includes(productId));
   }
 
-  async update(id: string, updates: Partial<ModifierCategory>): Promise<ModifierCategory | null> {
-    const existing = await prisma.modifierCategory.findUnique({ where: { id } });
+  async update(id: string, restaurantId: string, updates: Partial<ModifierCategory>): Promise<ModifierCategory | null> {
+    const existing = await prisma.modifierCategory.findUnique({ where: { id, restaurantId } });
     if (!existing) return null;
-    
+
     const current = this.mapToModifierCategory(existing);
     const updatedPayload = { ...current, ...updates };
 
     const updated = await prisma.modifierCategory.update({
-      where: { id },
+      where: { id, restaurantId },
       data: {
         name: updatedPayload.name,
         selection: updatedPayload.selectionType,
@@ -52,9 +52,9 @@ export class PrismaModifierRepository {
     return this.mapToModifierCategory(updated);
   }
 
-  async delete(id: string): Promise<boolean> {
+  async delete(id: string, restaurantId: string): Promise<boolean> {
     try {
-      await prisma.modifierCategory.delete({ where: { id } });
+      await prisma.modifierCategory.delete({ where: { id, restaurantId } });
       return true;
     } catch {
       return false;

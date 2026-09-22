@@ -7,7 +7,9 @@ const tableRepository = new PrismaTableRepository();
 export class TableController {
   static async createTable(req: Request, res: Response) {
     try {
-      const { restaurantId } = req.params;
+      // Ignoramos el restaurantId de la URL: la mesa siempre se crea en el
+      // restaurante del usuario autenticado, nunca en el que decida el cliente.
+      const restaurantId = req.user!.restaurantId;
       const { name, capacity } = req.body;
 
       const newTable = await tableRepository.create({
@@ -40,7 +42,8 @@ export class TableController {
   static async deleteTable(req: Request, res: Response) {
     try {
       const { tableId } = req.params;
-      await tableRepository.delete(tableId);
+      const restaurantId = req.user!.restaurantId;
+      await tableRepository.delete(tableId, restaurantId);
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: 'Error al eliminar la mesa' });
@@ -50,8 +53,9 @@ export class TableController {
   static async updateTable(req: Request, res: Response) {
     try {
       const { tableId } = req.params;
+      const restaurantId = req.user!.restaurantId;
       const { name, capacity, isActive } = req.body;
-      const updatedTable = await tableRepository.update(tableId, name, capacity, isActive);
+      const updatedTable = await tableRepository.update(tableId, restaurantId, name, capacity, isActive);
       res.json(updatedTable);
     } catch (error) {
       res.status(500).json({ error: 'Error al actualizar la mesa' });

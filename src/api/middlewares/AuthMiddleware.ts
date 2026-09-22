@@ -1,7 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-for-demo-purposes-only';
+// Sin valor de respaldo a propósito: si JWT_SECRET no está configurado en el
+// entorno, preferimos que el servidor falle al arrancar antes que firmar o
+// validar sesiones con un secreto adivinable (un secreto de "demo" escrito en
+// el código permitiría a cualquiera fabricar un token válido de cualquier
+// usuario, incluido un superadministrador).
+const JWT_SECRET: string = process.env.JWT_SECRET || (() => {
+  throw new Error('JWT_SECRET no está configurado. Defínelo en las variables de entorno antes de iniciar el servidor.');
+})();
 
 export interface AuthPayload {
   userId: string;

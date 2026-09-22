@@ -22,5 +22,6 @@ router.post('/staff', authenticateToken, AuthController.createStaff);
 router.get('/staff', authenticateToken, AuthController.getStaff);
 router.put('/staff/:id', authenticateToken, AuthController.updateStaff);
 router.delete('/staff/:id', authenticateToken, AuthController.deleteStaff);
+router.patch('/password', authenticateToken, AuthController.changePassword);
 
 export default router;

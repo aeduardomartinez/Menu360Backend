@@ -138,11 +138,33 @@ export const AuthController = {
       }
 
       const updatedUser = await authService.updateUser(id, adminRestaurantId, { name, email, password });
-      
+
       const { passwordHash, ...userWithoutPassword } = updatedUser;
       return res.status(200).json(userWithoutPassword);
     } catch (error: any) {
       return res.status(400).json({ error: error.message });
+    }
+  },
+
+  // Cambio de contraseña del propio usuario autenticado. Funciona para
+  // cualquier rol (SUPERADMIN incluido) porque solo depende del id que
+  // viene en el token, no de restaurantId.
+  async changePassword(req: Request, res: Response) {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: 'No autenticado' });
+      }
+
+      const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ error: 'Debes indicar la contraseña actual y la nueva contraseña' });
+      }
+
+      await authService.changeOwnPassword(userId, currentPassword, newPassword);
+      return res.status(200).json({ message: 'Contraseña actualizada correctamente' });
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message || 'No se pudo cambiar la contraseña' });
     }
   }
 };

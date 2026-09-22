@@ -1,3 +1,8 @@
+# Variables de entorno (secretos: JWT_SECRET, credenciales de base de datos, etc.)
+.env
+.env.*
+!.env.example
+
 # Logs
 logs
 *.log

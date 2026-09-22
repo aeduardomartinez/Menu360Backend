@@ -23,13 +23,13 @@ export class PrismaTableRepository {
     return tables.map(t => ({ ...t, capacity: t.capacity ?? undefined }));
   }
 
-  async delete(id: string): Promise<void> {
-    await prisma.table.delete({ where: { id } });
+  async delete(id: string, restaurantId: string): Promise<void> {
+    await prisma.table.delete({ where: { id, restaurantId } });
   }
 
-  async update(id: string, name: string, capacity?: number, isActive?: boolean): Promise<Table> {
+  async update(id: string, restaurantId: string, name: string, capacity?: number, isActive?: boolean): Promise<Table> {
     const updatedTable = await prisma.table.update({
-      where: { id },
+      where: { id, restaurantId },
       data: { name, capacity, isActive }
     });
     return { ...updatedTable, capacity: updatedTable.capacity ?? undefined };

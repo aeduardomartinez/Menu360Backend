@@ -12,7 +12,10 @@ export interface Product {
   description: string;
   price: number;
   category: string;
-  imageUrl: string; // Firebase URL
+  /** URL de la imagen en Firebase Storage (tamaño completo, para el detalle). */
+  imageUrl: string;
+  /** Miniatura de 400px para las tarjetas de la carta y del POS. */
+  thumbnailUrl?: string | null;
   isAvailable: boolean; // For real-time out of stock toggle
   trackStock?: boolean;
   currentStock?: number | null;

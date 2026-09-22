@@ -6,5 +6,6 @@ export interface IClientRepository {
   findByRestaurant(restaurantId: string): Promise<Client[]>;
   searchByPhoneOrName(restaurantId: string, query: string): Promise<Client[]>;
   findByExactPhone(restaurantId: string, phone: string): Promise<Client | null>;
+  findByDocumentId(restaurantId: string, documentId: string): Promise<Client | null>;
   update(id: string, updates: Partial<Client>): Promise<Client | null>;
 }

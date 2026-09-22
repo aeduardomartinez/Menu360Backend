@@ -13,15 +13,19 @@ export class CategoryService {
     return this.repository.create(newCategory);
   }
 
-  async updateCategory(id: string, name: string, oldName: string): Promise<Category> {
-    return this.repository.update(id, name, oldName);
+  async updateCategory(id: string, restaurantId: string, name: string, oldName: string): Promise<Category> {
+    return this.repository.update(id, restaurantId, name, oldName);
   }
 
   async getCategoriesByRestaurant(restaurantId: string): Promise<Category[]> {
     return this.repository.findByRestaurant(restaurantId);
   }
 
-  async deleteCategory(id: string): Promise<void> {
-    return this.repository.delete(id);
+  async deleteCategory(id: string, restaurantId: string): Promise<void> {
+    return this.repository.delete(id, restaurantId);
+  }
+
+  async reorderCategories(restaurantId: string, updates: { id: string, orderIndex: number }[]): Promise<void> {
+    return this.repository.reorder(restaurantId, updates);
   }
 }

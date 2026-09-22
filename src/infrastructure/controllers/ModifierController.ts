@@ -14,7 +14,10 @@ export class ModifierController {
 
   async create(req: Request, res: Response) {
     try {
-      const modifier = await modifierRepository.create(req.body);
+      // El restaurante siempre sale del token verificado, nunca de lo que
+      // mande el cliente en el cuerpo de la petición.
+      const restaurantId = req.user!.restaurantId;
+      const modifier = await modifierRepository.create({ ...req.body, restaurantId });
       // Emit socket event if needed
       res.status(201).json(modifier);
     } catch (e) {
@@ -25,7 +28,8 @@ export class ModifierController {
   async update(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const modifier = await modifierRepository.update(id, req.body);
+      const restaurantId = req.user!.restaurantId;
+      const modifier = await modifierRepository.update(id, restaurantId, req.body);
       if (!modifier) {
         return res.status(404).json({ error: 'Modifier not found' });
       }
@@ -38,7 +42,8 @@ export class ModifierController {
   async delete(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const success = await modifierRepository.delete(id);
+      const restaurantId = req.user!.restaurantId;
+      const success = await modifierRepository.delete(id, restaurantId);
       if (!success) {
         return res.status(404).json({ error: 'Modifier not found' });
       }

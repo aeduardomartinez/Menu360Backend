@@ -13,7 +13,7 @@ model Restaurant {
   id                String   @id @default(uuid())
   slug              String   @unique
   name              String
-  logoBase64        String?  @db.Text
+  logoUrl           String?
   themeColor        String
   adminThemeColor   String?
   welcomeMessage    String?
@@ -21,7 +21,7 @@ model Restaurant {
   address           String?
   neighborhood      String?
   city              String?
-  heroImageBase64   String?  @db.Text
+  heroImageUrl      String?
   fontFamily        String?
   borderRadius      String?
   isDarkMode        Boolean?
@@ -39,6 +39,35 @@ model Restaurant {
   titleEffect           String?  @default("animate-none")
   iconColor             String?  @default("#facc15")
   iconStyle             String?  @default("outline")
+
+  // ─── Apariencia del menú del cliente ────────────────────────────────────
+  // Menú 360 sirve a muchos restaurantes a la vez, así que la meta de estos
+  // campos es que dos tiendas no se parezcan: cada uno cambia una decisión
+  // visual distinta (color, tipografía, forma, densidad, fondo), y entre
+  // todos dan combinaciones muy diferentes sin tocar código.
+  //
+  // buttonStyle ya lo enviaba el panel de administración desde hace rato,
+  // pero no existía la columna, así que el valor se perdía en cada guardado:
+  // el cliente siempre veía botones sólidos por más que se eligiera
+  // "bordeado". Lo mismo pasaba con productViewStyle y cartStyle, que además
+  // no los leía ninguna pantalla; esos dos se quitaron del panel y se
+  // reemplazaron por productCardStyle, que sí cambia la vista de verdad.
+  accentColor           String?  @default("#0d6efd")  // Color de precios y acentos
+  buttonStyle           String?  @default("solid")    // 'solid' | 'outline'
+  productCardStyle      String?  @default("horizontal") // 'horizontal' | 'vertical' | 'compact'
+  cardShadow            String?  @default("soft")     // 'none' | 'soft' | 'strong'
+  sectionTitleStyle     String?  @default("plain")    // 'plain' | 'underline' | 'bar' | 'centered'
+  pageBackground        String?  @default("light")    // 'light' | 'warm' | 'cool' | 'slate' | 'dark'
+  headingFont           String?  @default("inherit")  // tipografía solo para títulos
+  // Estructura de la carta. Estos cinco son los que de verdad hacen que dos
+  // menús no se parezcan: el color se cambia en un segundo, pero un menú de
+  // renglones con línea de puntos y uno de tarjetas con foto grande son dos
+  // objetos distintos aunque compartan la paleta.
+  itemLayout            String?  @default("card")      // 'card' | 'divider' | 'boxed'
+  priceStyle            String?  @default("accent")    // 'accent' | 'plain' | 'chip' | 'leader'
+  nameStyle             String?  @default("normal")    // 'normal' | 'uppercase' | 'spaced'
+  density               String?  @default("normal")    // 'compact' | 'normal' | 'relaxed'
+  imageShape            String?  @default("rounded")   // 'rounded' | 'square' | 'circle' | 'none'
   kitchenAlertMinutes   Int?     @default(15)
   planType              String   @default("ADVANCED") // 'BASIC' | 'ADVANCED'
   taxType               String?  @default("NONE")     // 'INC' | 'IVA' | 'NONE'
@@ -47,6 +76,20 @@ model Restaurant {
   paymentFrequency      String?  @default("MONTHLY")  // 'MONTHLY' | 'QUARTERLY'
   paymentAmount         Float?   @default(0)
   isBlocked             Boolean? @default(false)
+  acceptedPaymentMethods String[] @default(["Efectivo", "Transferencia", "Tarjeta"])
+  // Cuentas bancarias / billeteras (Nequi, Daviplata, Bancolombia, etc.) que se
+  // muestran al cliente cuando elige "Transferencia" como medio de pago, para
+  // que sepa a qué cuenta consignar sin depender de que se lo digan por
+  // WhatsApp. Se guarda como Json (en vez de una tabla propia) porque es
+  // configuración de bajo volumen que siempre se lee junto con el restaurante,
+  // igual que deliveryConfig y schedule.
+  paymentAccounts        Json?    @default("[]")
+  // Controlado únicamente desde el panel supremo (SuperAdmin): ya no depende
+  // del plan (BASIC/ADVANCED), sino de que el SUPERADMIN active la
+  // facturación electrónica DIAN para esta tienda en particular. Por defecto
+  // queda desactivada para toda tienda nueva o existente hasta que se
+  // active explícitamente.
+  eInvoiceEnabled       Boolean? @default(false)
 
   users             User[]
   boxes             Box[]
@@ -143,7 +186,12 @@ model Product {
   description  String?    @db.Text
   price        Float
   category     String
-  imageUrl     String     @db.Text
+  /// URL en Firebase Storage. La imagen ya no se guarda acá dentro: antes
+  /// era un data URL en base64 y la carta entera viajaba en cada carga.
+  imageUrl     String
+  /// Versión de 400px para las tarjetas de la carta. El detalle del plato
+  /// usa imageUrl. Opcional porque no todas las imágenes tienen miniatura.
+  thumbnailUrl String?
   isAvailable  Boolean    @default(true)
   trackStock   Boolean    @default(false)
   currentStock Int?
@@ -163,16 +211,17 @@ model Order {
   restaurant      Restaurant @relation(fields: [restaurantId], references: [id])
   clientName      String
   clientPhone     String
+  clientDocument  String?
   items           Json
   totalAmount     Float
   status          String
   paymentMethod   String
+  isPaid          Boolean    @default(false)
   deliveryAddress String?
   deliveryType    String?
   neighborhood    String?
   city            String?
   orderComments   String?    @db.Text
-  orderType       String?
   origin          String?
   orderNumber     Int?
   driverId        String?
@@ -180,8 +229,34 @@ model Order {
   table           Table?     @relation(fields: [tableId], references: [id])
   waitressId      String?
   waitress        User?      @relation("WaitressOrders", fields: [waitressId], references: [id])
+  driverConfirmedCash Boolean @default(false)
+  // Transferencia verificada por el cajero: el dinero ya llegó a la cuenta
+  // del restaurante, pero el pedido TODAVÍA no se ha facturado. Es un paso
+  // intermedio propio de los domicilios web pagados por transferencia: es lo
+  // que habilita marcar el pedido "Listo para entrega", y recién al
+  // facturarlo (isPaid) la venta se registra en caja y suma a las ventas del
+  // día. Por eso no alcanza con isPaid para modelar esto: entre "el pago
+  // llegó" y "el pedido se facturó" pueden pasar varios minutos (lo que
+  // tarde la cocina).
+  transferConfirmed Boolean @default(false)
+  // Momento en que el restaurante aceptó un pedido que llegó de la web.
+  // Aceptar NO lo manda a cocina: el pedido sigue "Pendiente" hasta que
+  // alguien lo pase a "En preparación" a mano, cuando de verdad empiezan a
+  // hacerlo. Este campo solo distingue "pedido web sin revisar" (hay que
+  // aceptarlo o rechazarlo) de "pedido ya aceptado, esperando que lo
+  // preparen"; sin él, ambos casos se verían igual en el historial.
+  acceptedAt      DateTime?
+  invoices        Invoice[]
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
+
+  // Índices para acelerar las consultas más frecuentes: listar/filtrar por
+  // fecha (panel de administración), calcular el siguiente número de pedido
+  // al crear uno nuevo, y listar las entregas de un domiciliario.
+  @@index([restaurantId, createdAt])
+  @@index([restaurantId, orderNumber])
+  @@index([restaurantId, driverId])
+  @@index([restaurantId, status])
 }
 
 /// Define las mesas físicas disponibles en el restaurante.
@@ -222,6 +297,7 @@ model Invoice {
   restaurantId  String
   restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
   orderId       String
+  order         Order      @relation(fields: [orderId], references: [id])
   clientName    String
   clientNit     String
   clientEmail   String
@@ -281,5 +357,14 @@ model Client {
   neighborhood     String?
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
+
+  // Teléfono y cédula/NIT son los identificadores reales de un cliente: dos
+  // clientes del mismo restaurante no pueden compartir ni el mismo teléfono
+  // ni el mismo documento (Postgres permite múltiples NULL, así que un
+  // cliente sin teléfono o sin documento registrado no se ve afectado). Esto
+  // cierra a nivel de base de datos el hueco que dejaba la validación previa,
+  // que solo vivía en el código y no protegía contra condiciones de carrera.
+  @@unique([restaurantId, phone])
+  @@unique([restaurantId, documentId])
 }
 
