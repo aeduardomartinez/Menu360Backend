@@ -2,7 +2,10 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "Backend for restaurant order management",
-  "main": "src/server.ts",
+  "main": "dist/server.js",
+  "engines": {
+    "node": ">=20 <23"
+  },
   "scripts": {
     "build": "prisma generate && tsc",
     "start": "prisma migrate deploy && node dist/server.js",
