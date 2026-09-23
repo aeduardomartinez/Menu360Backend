@@ -1,6 +1,23 @@
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+
+  // Supabase expone dos puertos distintos y hacen falta los dos.
+  //
+  // DATABASE_URL apunta al pooler en modo transacción (puerto 6543). Es el que
+  // usa la aplicación: reparte muchas conexiones cortas entre pocas reales, que
+  // es lo que necesita un servidor web. Además es IPv4, mientras que la conexión
+  // directa (db.<ref>.supabase.co) es solo IPv6 en el plan gratuito y desde
+  // Render no se alcanza.
+  //
+  // DIRECT_URL apunta al pooler en modo sesión (puerto 5432) y solo lo usan las
+  // migraciones: `prisma migrate deploy` necesita bloqueos de aviso y sentencias
+  // preparadas que el modo transacción no soporta, así que contra el 6543
+  // fallaría. Prisma decide sola cuál usar en cada caso.
+  //
+  // En local define DIRECT_URL en tu .env con el mismo valor que DATABASE_URL:
+  // si falta, Prisma se queja de que la variable no existe.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
