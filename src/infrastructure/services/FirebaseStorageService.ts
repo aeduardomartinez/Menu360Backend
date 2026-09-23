@@ -30,6 +30,59 @@ export function credencialesFaltantes(): string[] {
   ].filter((k) => !(process.env[k] || '').trim());
 }
 
+/**
+ * Quita las comillas que envuelven un valor de variable de entorno.
+ *
+ * En local no hacían daño porque dotenv las quita al leer el .env. El panel
+ * de Render no interpreta nada: guarda el texto tal cual, comillas incluidas.
+ * Por eso una credencial que funciona en tu máquina puede fallar publicada,
+ * que es de los errores más desconcertantes que hay.
+ */
+function limpiar(valor: string): string {
+  const v = (valor || '').trim();
+  if (v.length > 1 && ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")))) {
+    return v.slice(1, -1).trim();
+  }
+  return v;
+}
+
+/**
+ * Deja la clave privada en PEM válido venga como venga.
+ *
+ * El SDK se la pasa a OpenSSL, que es estricto con el formato: si algo no
+ * cuadra responde `error:1E08010C:DECODER routines::unsupported`, un mensaje
+ * que no dice absolutamente nada sobre cuál es el problema real. Y hay tres
+ * formas distintas de que se estropee al copiarla a un panel de hosting:
+ *
+ *  1. Con comillas alrededor (las quita `limpiar`).
+ *  2. Con los saltos escritos como la secuencia literal \n, que es como se
+ *     guarda dentro del JSON que descarga Firebase.
+ *  3. Sin ningún salto de línea, porque el campo del formulario los eliminó
+ *     al pegar un valor de varias líneas. Este es el peor, porque a simple
+ *     vista en el panel la clave se ve completa y correcta.
+ *
+ * El tercer caso se repara reconstruyendo el PEM: se toma el base64 de en
+ * medio y se vuelve a partir en líneas de 64 caracteres, que es el formato
+ * que OpenSSL espera.
+ */
+function normalizarClavePrivada(bruta: string): string {
+  let k = limpiar(bruta);
+
+  k = k.replace(/\\r/g, '').replace(/\\n/g, '\n').replace(/\r/g, '');
+
+  if (!k.includes('\n')) {
+    const m = /-----BEGIN ([A-Z ]+)-----\s*([\s\S]*?)\s*-----END \1-----/.exec(k);
+    if (m) {
+      const cuerpo = m[2].replace(/\s+/g, '');
+      const lineas = cuerpo.match(/.{1,64}/g) || [];
+      k = `-----BEGIN ${m[1]}-----\n${lineas.join('\n')}\n-----END ${m[1]}-----\n`;
+    }
+  }
+
+  if (!k.endsWith('\n')) k += '\n';
+  return k;
+}
+
 function app(): App {
   // getApps() evita reinicializar en cada recarga de nodemon, que si no lanza
   // "The default Firebase app already exists".
@@ -50,16 +103,30 @@ function app(): App {
 
   const { FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY, FIREBASE_STORAGE_BUCKET } = process.env as Record<string, string>;
 
+  const privateKey = normalizarClavePrivada(FIREBASE_PRIVATE_KEY);
+
+  // Si después de normalizar sigue sin parecer un PEM, el problema es la
+  // clave en sí y no su formato: se corta acá con un mensaje que apunta al
+  // sitio correcto, en vez de dejar que OpenSSL responda su
+  // "DECODER routines::unsupported", que no le sirve a nadie.
+  if (!/^-----BEGIN [A-Z ]+-----\n[\s\S]+\n-----END [A-Z ]+-----\n$/.test(privateKey)) {
+    throw new Error(
+      'FIREBASE_PRIVATE_KEY no tiene el formato de una clave PEM. Debe empezar por ' +
+        '-----BEGIN PRIVATE KEY----- y terminar por -----END PRIVATE KEY-----. ' +
+        'Cópiala del campo "private_key" del archivo JSON que descargaste de Firebase ' +
+        '(Configuración del proyecto → Cuentas de servicio → Generar nueva clave privada), ' +
+        'sin las comillas que la rodean en el JSON.'
+    );
+  }
+
   return initializeApp({
     credential: cert({
-      projectId: FIREBASE_PROJECT_ID,
-      clientEmail: FIREBASE_CLIENT_EMAIL,
-      // dotenv entrega los saltos de línea de la clave como la secuencia
-      // literal \n; el SDK necesita saltos de verdad.
-      privateKey: FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      projectId: limpiar(FIREBASE_PROJECT_ID),
+      clientEmail: limpiar(FIREBASE_CLIENT_EMAIL),
+      privateKey,
     }),
     // Sin gs:// por delante: el SDK espera solo el nombre del bucket.
-    storageBucket: FIREBASE_STORAGE_BUCKET.replace(/^gs:\/\//, ''),
+    storageBucket: limpiar(FIREBASE_STORAGE_BUCKET).replace(/^gs:\/\//, ''),
   });
 }
 
