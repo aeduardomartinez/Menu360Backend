@@ -2,7 +2,9 @@ export type UserRole = 'SUPERADMIN' | 'ADMIN' | 'CASHIER' | 'DELIVERY' | 'WAITRE
 
 export interface User {
   id: string;
-  restaurantId: string;
+  /** Nulo solo para el SUPERADMIN, que está por encima de los restaurantes.
+   *  El resto de roles siempre pertenece a uno. */
+  restaurantId: string | null;
   name?: string;
   lastName?: string;
   email: string;

@@ -45,21 +45,36 @@ export class AuthService {
     const esProduccion = process.env.NODE_ENV === 'production';
     const email = process.env.SEED_ADMIN_EMAIL;
     const password = process.env.SEED_ADMIN_PASSWORD;
-    const restaurantId = process.env.SEED_ADMIN_RESTAURANT_ID || 'rest-1';
+
+    // SUPERADMIN o ADMIN. El superadministrador es el dueño de la plataforma:
+    // crea y da de baja negocios, cambia planes y activa la facturación
+    // electrónica. No se puede crear desde la aplicación —todas las rutas de
+    // /superadmin exigen ya serlo— así que este es el único camino para el
+    // primero, y por eso existe esta variable.
+    const rol: UserRole = process.env.SEED_ADMIN_ROLE === 'SUPERADMIN' ? 'SUPERADMIN' : 'ADMIN';
+
+    // El SUPERADMIN está por encima de los restaurantes y no pertenece a
+    // ninguno; el ADMIN siempre pertenece a uno.
+    const restaurantId = rol === 'SUPERADMIN'
+      ? null
+      : (process.env.SEED_ADMIN_RESTAURANT_ID || 'rest-1');
 
     if (email && password) {
       if (password.length < 12) {
         console.error(
-          '[seed] SEED_ADMIN_PASSWORD es demasiado corta (mínimo 12 caracteres). No se creó el administrador.'
+          '[seed] SEED_ADMIN_PASSWORD es demasiado corta (mínimo 12 caracteres). No se creó el usuario.'
         );
         return;
       }
       try {
-        await this.createUser('Administrador', email, password, 'ADMIN', restaurantId);
-        console.log(`[seed] Administrador inicial creado: ${email}`);
-        console.log('[seed] Borra SEED_ADMIN_EMAIL y SEED_ADMIN_PASSWORD del entorno ahora que ya existe.');
+        await this.createUser(
+          rol === 'SUPERADMIN' ? 'Superadministrador' : 'Administrador',
+          email, password, rol, restaurantId
+        );
+        console.log(`[seed] ${rol} inicial creado: ${email}`);
+        console.log('[seed] Borra SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD y SEED_ADMIN_ROLE del entorno ahora que ya existe.');
       } catch (e) {
-        console.log(`[seed] El administrador ${email} ya existía; no se hizo nada.`);
+        console.log(`[seed] El usuario ${email} ya existía; no se hizo nada.`);
       }
       return;
     }
@@ -127,7 +142,7 @@ export class AuthService {
     email: string, 
     password: string, 
     role: UserRole, 
-    restaurantId: string,
+    restaurantId: string | null,
     lastName?: string,
     phone?: string,
     vehiclePlate?: string

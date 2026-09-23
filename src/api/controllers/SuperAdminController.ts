@@ -126,7 +126,13 @@ export const SuperAdminController = {
         await tx.financialRecord.deleteMany({ where: { restaurantId: id } });
         await tx.boxSession.deleteMany({ where: { restaurantId: id } });
         await tx.order.deleteMany({ where: { restaurantId: id } });
-        
+
+        // Las mesas van DESPUÉS de los pedidos: Order.tableId apunta a Table,
+        // así que borrarlas antes dejaría pedidos apuntando a una mesa que ya
+        // no existe y Postgres lo rechazaría.
+        await tx.table.deleteMany({ where: { restaurantId: id } });
+        await tx.client.deleteMany({ where: { restaurantId: id } });
+
         await tx.product.deleteMany({ where: { restaurantId: id } });
         await tx.category.deleteMany({ where: { restaurantId: id } });
         await tx.modifierCategory.deleteMany({ where: { restaurantId: id } });
