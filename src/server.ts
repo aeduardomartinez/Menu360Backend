@@ -10,6 +10,12 @@
 // cualquier módulo que lea process.env al cargarse debe encontrarlo ya listo.
 import 'dotenv/config';
 
+// Justo después del .env y antes que todo lo demás: fija la zona horaria del
+// proceso a la del negocio, porque todo el cálculo de jornadas usa la hora
+// local del servidor y en Render eso es UTC. Cualquier módulo que calcule
+// fechas al cargarse tiene que encontrarla ya puesta. Ver shared/timezone.ts.
+import './shared/timezone';
+
 import http from 'http';
 import https from 'https';
 import fs from 'fs';
@@ -26,6 +32,7 @@ import { notFoundHandler } from './api/middlewares/NotFoundHandler';
 import { errorHandler } from './api/middlewares/ErrorHandler';
 import { logger } from './shared/utils/logger';
 import { credencialesFaltantes } from './infrastructure/services/FirebaseStorageService';
+import { TIMEZONE } from './shared/timezone';
 
 const PORT = process.env.PORT || 4000;
 
@@ -204,6 +211,11 @@ httpServer.listen(Number(PORT), '0.0.0.0', () => {
   const protocol = (process.env.SSL_KEY_PATH && process.env.SSL_CERT_PATH) ? 'HTTPS' : 'HTTP';
   console.log(`🔒 Server is running on port ${PORT} using ${protocol}`);
   logger.info(`Server is running on port ${PORT} using ${protocol}`);
+
+  // Se registra porque una zona horaria equivocada no rompe nada de forma
+  // visible: simplemente hace que el historial de un día salga vacío o con
+  // los pedidos corridos, y eso es muy difícil de atribuir sin este dato.
+  console.log(`🕒 Zona horaria: ${TIMEZONE} (hora local del servidor: ${new Date().toLocaleString('es-CO')})`);
 
   // Aviso al arrancar si Firebase Storage no está configurado. No se tumba el
   // servidor por esto: un restaurante puede seguir tomando pedidos sin poder
